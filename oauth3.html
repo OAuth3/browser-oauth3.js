@@ -25,7 +25,9 @@
   }
 
   setTimeout(function () {
-    window.opener[cbname](name, window.location.href);
+    // opener is for popup window, new tab
+    // parent is for iframe
+    (window.opener||window.parent)[cbname](name, window.location.href);
   }, 10);
 
   // iOS Webview (namely Chrome) workaround
