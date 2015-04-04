@@ -1,0 +1,42 @@
+<script>
+  var re = /(?:\?|&|#)provider_uri=([^\?\&\#]+)/
+  var re2 = /\/(?:auth|providers)\/([^\/]+)\/callback/
+  var re22 = /\/callbacks\/([^\/]+)/;
+  var reCb = /(?:\?|&|#)callback_fn=([^\?\&\#]+)/
+  var href = window.location.href;
+  var m;
+  var m2;
+  var cbname;
+  var name;
+
+  m = href.match(re) || href.match(re2) || href.match(re22);
+  m2 = href.match(reCb);
+
+  if (!m) {
+    window.alert("callback URLs should include 'provider_uri', such as '?provider_uri=' + encodeURIComponent('https://www.provider.com')");
+  } else {
+    name = m[1]
+  }
+
+  if (m2) {
+    cbname = '_oauth3_callback_' + m2[1];
+  } else {
+    cbname = 'completeLogin';
+  }
+
+  setTimeout(function () {
+    window.opener[cbname](name, window.location.href);
+  }, 10);
+
+  // iOS Webview (namely Chrome) workaround
+  setTimeout(function () {
+    window.open('', '_self', '');
+    window.close();
+  }, 50);
+
+  localStorage.setItem(name + 'Status', window.location.href);
+</script>
+
+<p>Redirecting... </p>
+
+<a href="javascript:window.opener.completeLogin(name, window.location.href);">close</a>

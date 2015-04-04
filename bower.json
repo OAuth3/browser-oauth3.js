@@ -1,0 +1,26 @@
+{
+  "name": "OAuth3",
+  "version": "1.0.0-pre",
+  "authors": [
+    "AJ ONeal <awesome@coolaj86.com>"
+  ],
+  "description": "OAuth3 Browser Components",
+  "main": "oauth3.html",
+  "keywords": [
+    "oauth",
+    "oauth2",
+    "oauth3",
+    "oauth3.json",
+    "oauth3.js",
+    "oauth3.html"
+  ],
+  "license": "TRON",
+  "homepage": "https://github.com/OAuth3/bower-oauth3",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}
