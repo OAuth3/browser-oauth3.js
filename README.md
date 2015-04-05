@@ -12,9 +12,9 @@ framework agnostic utilities for seemless login, logout, user switching, and sco
 Utilities which return appropriate urls and request parameters for various login types.
 
 * `window.ngOauth3`
-* Oauth3.implicitGrant(provider_uri, scope, redirect_uri, client_id)
-* Oauth3.authorizationCode(provider_uri, scope, redirect_uri, client_id)
-* Oauth3.resourceOwnerPassword(provider_uri, scope, username, password, client_id)
+* `Oauth3.implicitGrant(provider_uri, scope, redirect_uri, client_id)`
+* `Oauth3.authorizationCode(provider_uri, scope, redirect_uri, client_id)`
+* `Oauth3.resourceOwnerPassword(provider_uri, scope, username, password, client_id)`
 
 Notes
 
