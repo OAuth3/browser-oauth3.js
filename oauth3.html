@@ -1,33 +1,32 @@
 <script>
-  var re = /(?:\?|&|#)provider_uri=([^\?\&\#]+)/
-  var re2 = /\/(?:auth|providers)\/([^\/]+)\/callback/
-  var re22 = /\/callbacks\/([^\/]+)/;
-  var reCb = /(?:\?|&|#)callback_fn=([^\?\&\#]+)/
-  var href = window.location.href;
-  var m;
-  var m2;
-  var cbname;
-  var name;
+  var params = {};
+  var anchor;
 
-  m = href.match(re) || href.match(re2) || href.match(re22);
-  m2 = href.match(reCb);
+  anchor = document.createElement('a');
+  anchor.href = window.location.href;
+  anchor.search.substr(1).split('&').forEach(function (pair) {
+    pair = pair.split('=');
+    var key = pair[0];
+    var val = pair[1];
 
-  if (!m) {
-    window.alert("callback URLs should include 'provider_uri', such as '?provider_uri=' + encodeURIComponent('https://www.provider.com')");
-  } else {
-    name = m[1]
-  }
+    params[decodeURIComponent(key)] = decodeURIComponent(val);
+  });
 
-  if (m2) {
-    cbname = '_oauth3_callback_' + m2[1];
-  } else {
-    cbname = 'completeLogin';
+  params.url = window.location.href;
+
+  if (!(params.browser_state || params.state)) {
+    window.alert("callback URLs should include 'browser_state' (authorization code)"
+      + " or 'state' (implicit grant))");
   }
 
   setTimeout(function () {
     // opener is for popup window, new tab
     // parent is for iframe
-    (window.opener||window.parent)[cbname](name, window.location.href);
+    if (params.callback) {
+      (window.opener||window.parent)['__oauth3_' + params.callback](params);
+    } else {
+      (window.opener||window.parent).completeLogin(null, params.url, params);
+    }
   }, 10);
 
   // iOS Webview (namely Chrome) workaround
@@ -36,7 +35,9 @@
     window.close();
   }, 50);
 
-  localStorage.setItem(name + 'Status', window.location.href);
+  setTimeout(function () {
+    localStorage.setItem('oauth3.' + params.browser_state, JSON.stringify(params));
+  }, 0);
 </script>
 
 <p>Redirecting... </p>

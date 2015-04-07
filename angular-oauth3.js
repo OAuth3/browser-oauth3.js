@@ -12,14 +12,24 @@ angular
 
     oauth3.states = {};
 
+    oauth3.stringifyscope = function (scope) {
+      if (Array.isArray(scope)) {
+        scope = scope.join(' ');
+      }
+      return scope;
+    };
+
     oauth3.querystringify = function (params) {
-      var qs = '';
+      var qs = [];
 
       Object.keys(params).forEach(function (key) {
-        qs += key + '=' + encodeURIComponent(params[key]);
+        if ('scope' === key) {
+          oauth3.stringifyscope(params[key]);
+        }
+        qs.push(key + '=' + encodeURIComponent(params[key]));
       });
 
-      return qs;
+      return qs.join('&');
     };
 
     oauth3.discover = function (providerUri) {
@@ -38,9 +48,64 @@ angular
       });
     };
 
+    oauth3.authorizationRedirect = function (providerUri, scope, apiHost, redirectUri) {
+      //
+      // Example Authorization Redirect - from Browser to Consumer API
+      // (for generating a session securely on your own server)
+      //
+      // i.e. GET https://<<CONSUMER>>.com/api/oauth3/authorization_redirect/<<PROVIDER>>.com
+      //
+      // GET https://myapp.com/api/oauth3/authorization_redirect
+      //  /`encodeURIComponent('example.com')`
+      //  &scope=`encodeURIComponent('profile.login profile.email')`
+      //
+      // (optional)
+      //  &state=`Math.random()`
+      //  &redirect_uri=
+      //    `encodeURIComponent('https://other.com/'
+      //       + '?provider_uri=' + ``encodeURIComponent('https://example.com')``
+      //    )`
+      //
+      // NOTE: This is not a request sent to the provider, but rather a request sent to the
+      // consumer (your own API) which then sets some state and redirects.
+      // This will initiate the `authorization_code` request on your server
+      //
+
+      var state = Math.random().toString().replace(/^0\./, '');
+      var params = {};
+
+      params.state = state;
+      if (scope) {
+        params.scope = scope;
+      }
+      if (redirectUri) {
+        params.redirect_uri = redirectUri;
+      }
+      if (!apiHost) {
+        // TODO oauth3.json for self?
+        apiHost = 'https://' + window.location.host;
+      }
+
+      oauth3.states[state] = {
+        providerUri: providerUri
+      , createdAt: new Date().toISOString()
+      };
+
+      return $q.when({
+        url: apiHost
+          + '/api/oauth3/authorization_redirect/'
+          + encodeURIComponent(providerUri.replace(/^(https?|spdy):\/\//, ''))
+          + '?' + oauth3.querystringify(params)
+      , method: 'GET'
+      , state: state
+      , params: params
+      });
+    };
+
     oauth3.authorizationCode = function (providerUri, scope, redirectUri, clientId) {
       //
       // Example Authorization Code Request
+      // (not for use in the browser)
       //
       // GET https://example.com/api/oauth3/authorization_dialog
       //  ?response_type=code
@@ -54,6 +119,10 @@ angular
       //
       // NOTE: `redirect_uri` itself may also contain URI-encoded components
       //
+      // NOTE: This probably shouldn't be done in the browser because the server
+      //   needs to initiate the state. If it is done in a browser, the browser
+      //   should probably request 'state' from the server beforehand
+      //
 
       throw new Error("not implemented");
     };
@@ -61,6 +130,7 @@ angular
     oauth3.implicitGrant = function (providerUri, scope, redirectUri, clientId) {
       //
       // Example Implicit Grant Request
+      // (for generating a browser-only session, not a session on your server)
       //
       // GET https://example.com/api/oauth3/authorization_dialog
       //  ?response_type=token
@@ -109,18 +179,19 @@ angular
       
         uri += '?' + oauth3.querystringify(params);
 
-        return {
+        return $q.when({
           url: uri
         , state: state
         , method: args.method
         , query: params
-        };
+        });
       });
     };
 
     oauth3.resourceOwnerPassword = function (providerUri, username, passphrase, scope, clientId) {
       //
       // Example Resource Owner Password Request
+      // (generally for 1st party and direct-partner mobile apps, and webapps)
       //
       // POST https://example.com/api/oauth3/access_token
       //    { "grant_type": "password", "client_id": "<<id>>", "scope": "<<scope>>"
