@@ -1,43 +1,66 @@
 <script>
-  var params = {};
-  var anchor;
+  function main() {
+    var params = {};
+    var anchor;
 
-  anchor = document.createElement('a');
-  anchor.href = window.location.href;
-  anchor.search.substr(1).split('&').forEach(function (pair) {
-    pair = pair.split('=');
-    var key = pair[0];
-    var val = pair[1];
+    anchor = document.createElement('a');
+    anchor.href = window.location.href;
+    anchor.search.substr(1).split('&').forEach(function (pair) {
+      pair = pair.split('=');
+      var key = pair[0];
+      var val = pair[1];
 
-    params[decodeURIComponent(key)] = decodeURIComponent(val);
-  });
+      params[decodeURIComponent(key)] = decodeURIComponent(val);
+    });
 
-  params.url = window.location.href;
+    params.url = window.location.href;
 
-  if (!(params.browser_state || params.state)) {
-    window.alert("callback URLs should include 'browser_state' (authorization code)"
-      + " or 'state' (implicit grant))");
-  }
-
-  setTimeout(function () {
-    // opener is for popup window, new tab
-    // parent is for iframe
-    if (params.callback) {
-      (window.opener||window.parent)['__oauth3_' + params.callback](params);
-    } else {
-      (window.opener||window.parent).completeLogin(null, params.url, params);
+    if (params.logout) {
+      // TODO specify specific account or all?
+      window.location.href = '/#/logout/' + (params.callback || 'completeLogin');
+      return;
     }
-  }, 10);
+    else if (params.close) {
+      // whatevs
+    }
+    else if (!(params.browser_state || params.state)) {
+      window.alert("callback URLs should include 'browser_state' (authorization code)"
+        + " or 'state' (implicit grant))");
+    }
 
-  // iOS Webview (namely Chrome) workaround
-  setTimeout(function () {
-    window.open('', '_self', '');
-    window.close();
-  }, 50);
+    setTimeout(function () {
+      // opener is for popup window, new tab
+      // parent is for iframe
+      if (params.callback && params.callback !== 'completeLogin') {
+        (window.opener||window.parent)['__oauth3_' + params.callback](params);
+      } else {
+        (window.opener||window.parent).completeLogin(null, params.url, params);
+      }
+    }, 10);
 
-  setTimeout(function () {
-    localStorage.setItem('oauth3.' + params.browser_state, JSON.stringify(params));
-  }, 0);
+    // iOS Webview (namely Chrome) workaround
+    setTimeout(function () {
+      window.open('', '_self', '');
+      window.close();
+    }, 50);
+
+    setTimeout(function () {
+      var i;
+      var len = localStorage.length;
+      var key;
+
+      for (i = 0; i < len; i += 1) {
+        key = localStorage.key(i);
+        // TODO check updatedAt
+        if (/^oauth3\./.test(key)) {
+          localStorage.removeItem(key);
+        }
+      }
+      params.updatedAt = Date.now();
+      localStorage.setItem('oauth3.' + (params.browser_state || params.state), JSON.stringify(params));
+    }, 0);
+  }
+  main();
 </script>
 
 <p>Redirecting... </p>
