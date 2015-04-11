@@ -153,6 +153,7 @@ angular
         var state = Math.random().toString().replace(/^0\./, '');
         var params = {};
         var rparams = { provider_uri: providerUri };
+        var loc;
 
         // TODO nix rparams if we can do this with state alone
         oauth3.states[state] = {
@@ -160,6 +161,7 @@ angular
         , createdAt: new Date().toISOString()
         };
 
+        params.state = state;
         params.response_type = responseType;
         if (scope) {
           if (Array.isArray(scope)) {
@@ -172,7 +174,12 @@ angular
           params.client_id = clientId;
         }
         if (!redirectUri) {
-          // TODO use window.location + oauth3.html
+          loc = $window.location;
+          redirectUri = loc.protocol + '//' + loc.host + loc.pathname;
+          if ('/' !== redirectUri[redirectUri.length - 1]) {
+            redirectUri += '/';
+          }
+          redirectUri += 'oauth3.html';
         }
         redirectUri += '?' + oauth3.querystringify(rparams);
         params.redirect_uri = redirectUri;
