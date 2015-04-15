@@ -33,7 +33,8 @@
       return;
     }
     else if (params.close) {
-      // whatevs
+      // phone home will log us out
+      params.callback = browserState;
     }
     else if (!(params.browser_state || params.state)) {
       window.alert("callback URLs should include 'browser_state' (authorization code)"
