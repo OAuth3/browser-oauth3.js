@@ -1,7 +1,10 @@
 <script>
   function main() {
+    var myself = location.protocol + '//' + location.host + location.pathname;
     var params = {};
     var anchor;
+    var err;
+    var browserState;
 
     anchor = document.createElement('a');
     anchor.href = window.location.href;
@@ -23,17 +26,65 @@
       params[key] = val;
     });
 
+    function querystringify(params) {
+      var arr = [];
+
+      Object.keys(params).forEach(function (k) {
+        arr.push(encodeURIComponent(k), encodeURIComponent(params[k]));
+      });
+
+      return arr.join('&');
+    }
+
     params.url = window.location.href;
 
     console.log('[oauth3.html] params');
     console.log(params);
+    function phoneAway() {
+      // TODO test for ? / #
+      window.location.href = params.redirect_uri + '#' + querystringify(params);
+    }
+
+    browserState = params.browser_state || params.state;
+
     if (params.logout) {
+      if (!params.redirect_uri) {
+        window.alert('redirect_uri not defined');
+        err = new Error('redirect_uri not defined');
+        console.error(err.message);
+        console.warn(err.stack);
+        params.redirect_uri = document.referer;
+        phoneAway();
+        return;
+      }
+
+      if (!browserState) {
+        params.error = "E_NO_BROWSER_STATE";
+        params.error_description = "you must specify a state parameter";
+        phoneAway();
+        return;
+      }
+
+      localStorage.setItem('oauth3.states.' + browserState, JSON.stringify(params));
+
       // TODO specify specific account or all?
-      window.location.href = '/#/logout/' + (params.callback || 'completeLogin');
+      window.location.href = '/#/logout/' + browserState;
+      return;
+    }
+    else if (params.logout_callback) {
+      if (!browserState) {
+        params.error = "E_NO_BROWSER_STATE";
+        params.error_description = "you must specify a state parameter";
+        phoneAway();
+        return;
+      }
+
+      params = JSON.parse(localStorage.getItem('oauth3.states.' + browserState, params));
+      window.location.href = params.redirect_uri + '#close=true&state=' + browserState;
       return;
     }
     else if (params.close) {
-      // phone home will log us out
+      // don't do anything, phoneHome() will call the final callback
       params.callback = browserState;
     }
     else if (!(params.browser_state || params.state)) {
@@ -41,14 +92,18 @@
         + " or 'state' (implicit grant))");
     }
 
-    setTimeout(function () {
-      // opener is for popup window, new tab
-      // parent is for iframe
+    function phoneHome() {
       if (params.callback && params.callback !== 'completeLogin') {
         (window.opener||window.parent)['__oauth3_' + params.callback](params);
       } else {
         (window.opener||window.parent).completeLogin(null, params.url, params);
       }
+    }
+
+    setTimeout(function () {
+      // opener is for popup window, new tab
+      // parent is for iframe
+      phoneHome();
     }, 10);
 
     // iOS Webview (namely Chrome) workaround
