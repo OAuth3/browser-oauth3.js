@@ -97,8 +97,8 @@ angular
           + encodeURIComponent(providerUri.replace(/^(https?|spdy):\/\//, ''))
           + '?' + oauth3.querystringify(params)
       , method: 'GET'
-      , state: state
-      , params: params
+      , state: state    // this becomes browser_state
+      , params: params  // includes scope, final redirect_uri?
       });
     };
 
