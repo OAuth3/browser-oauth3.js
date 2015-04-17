@@ -41,21 +41,9 @@
       return arr.join('&');
     }
 
-    params.url = window.location.href;
-
-    console.log('[oauth3.html] params');
-    console.log(params);
     function phoneAway() {
       // TODO test for ? / #
       window.location.href = params.redirect_uri + '#' + querystringify(params);
-    }
-
-    browserState = params.browser_state || params.state;
-    if (!params.provider_uri) {
-      browserCallback = params.callback || browserState;
-    } else {
-      // deprecated
-      browserCallback = 'completeLogin';
     }
 
     function lintAndSetRedirectable() {
@@ -81,24 +69,27 @@
     function redirectCallback() {
       var redirect_uri = params.redirect_uri;
       delete params.redirect_uri;
-      console.log('d', redirect_uri);
       params.close = true;
       params.callback = browserState;
 
       var url = redirect_uri + '#' + querystringify(params);
 
-      console.log('[real] ldsconnect.org', params);
       window.location.href = url;
     }
 
     params = parseParams();
+    params.url = window.location.href;
     browserState = params.browser_state || params.state;
 
-    if ('directives' === params.action || params.directives) {
-      console.log('a')
+    if (!params.provider_uri) {
+      browserCallback = params.callback || browserState;
+    } else {
+      // deprecated
+      browserCallback = 'completeLogin';
+    }
 
+    if ('directives' === params.action || params.directives) {
       if (!lintAndSetRedirectable()) {
-        console.log('a bad')
         phoneAway();
       }
 
@@ -117,7 +108,6 @@
       }
 
       if (directives) {
-        console.log('b cache')
         params.directives = directives;
         redirectIf();
         if (fresh) {
@@ -139,7 +129,6 @@
           return;
         }
 
-        console.log('c')
         try {
           directives = btoa(JSON.stringify(JSON.parse(req.responseText)));
           params.directives = directives;
