@@ -63,9 +63,9 @@
   logins.authorizationRedirect = function (providerUri, opts) {
     return oauth3.authorizationRedirect(
       providerUri
-    , opts.scope // default to directive from this provider
-    , opts.apiHost
+    , opts.authorizationRedirect
     , opts.redirectUri
+    , opts.scope // default to directive from this provider
     ).then(function (prequest) {
       if (!prequest.state) {
         throw new Error("[Devolper Error] [authorization redirect] prequest.state is empty");
@@ -275,6 +275,7 @@
         + window.location.pathname + 'oauth3.html')
     , state: state
     };
+
     url += oauth3.querystringify(params);
 
     promise = oauth3.insertIframe(url, state, opts);
@@ -422,7 +423,7 @@
     return promise;
   };
 
-  oauth3.authorizationRedirect = function (providerUri, scope, apiHost, redirectUri) {
+  oauth3.authorizationRedirect = function (providerUri, authorizationRedirect, redirectUri, scope) {
     //console.log('[authorizationRedirect]');
     //
     // Example Authorization Redirect - from Browser to Consumer API
@@ -430,45 +431,54 @@
     //
     // i.e. GET https://<<CONSUMER>>.com/api/oauth3/authorization_redirect/<<PROVIDER>>.com
     //
-    // GET https://myapp.com/api/oauth3/authorization_redirect
-    //  /`encodeURIComponent('example.com')`
+    // GET https://myapp.com/api/oauth3/authorization_redirect/`encodeURIComponent('example.com')`
     //  &scope=`encodeURIComponent('profile.login profile.email')`
     //
     // (optional)
     //  &state=`Math.random()`
-    //  &redirect_uri=
-    //    `encodeURIComponent('https://other.com/'
-    //       + '?provider_uri=' + ``encodeURIComponent('https://example.com')``
-    //    )`
+    //  &redirect_uri=`encodeURIComponent('https://myapp.com/oauth3.html')`
     //
     // NOTE: This is not a request sent to the provider, but rather a request sent to the
     // consumer (your own API) which then sets some state and redirects.
     // This will initiate the `authorization_code` request on your server
     //
 
-    var state = Math.random().toString().replace(/^0\./, '');
-    var params = {};
+    return oauth3.discover(providerUri).then(function (directive) {
+      if (!directive) {
+        throw new Error("Developer Error: directive should exist when discovery is successful");
+      }
 
-    params.state = state;
-    if (scope) {
-      params.scope = scope;
-    }
-    if (redirectUri) {
-      params.redirect_uri = redirectUri;
-    }
-    if (!apiHost) {
-      // TODO oauth3.json for self?
-      apiHost = 'https://' + window.location.host;
-    }
+      var state = Math.random().toString().replace(/^0\./, '');
+      var params = {};
+      var slimProviderUri = encodeURIComponent(providerUri.replace(/^(https?|spdy):\/\//, ''));
 
-    return oauth3.PromiseA.resolve({
-      url: apiHost
-        + '/api/oauth3/authorization_redirect/'
-        + encodeURIComponent(providerUri.replace(/^(https?|spdy):\/\//, ''))
-        + '?' + oauth3.querystringify(params)
-    , method: 'GET'
-    , state: state    // this becomes browser_state
-    , params: params  // includes scope, final redirect_uri?
+      params.state = state;
+      if (scope) {
+        params.scope = scope;
+      }
+      if (redirectUri) {
+        params.redirect_uri = redirectUri;
+      }
+      // Note: the type check is necessary because we allow 'true'
+      // as an automatic mechanism when it isn't necessary to specify
+      if ('string' !== typeof authorizationRedirect) {
+        // TODO oauth3.json for self?
+        authorizationRedirect = 'https://' + window.location.host
+          + '/api/oauth3/authorization_redirect/:provider_uri';
+      }
+      authorizationRedirect = authorizationRedirect
+        .replace(/!(provider_uri)/, slimProviderUri)
+        .replace(/:provider_uri/, slimProviderUri)
+        .replace(/#{provider_uri}/, slimProviderUri)
+        .replace(/{{provider_uri}}/, slimProviderUri)
+        ;
+
+      return oauth3.PromiseA.resolve({
+        url: authorizationRedirect + '?' + oauth3.querystringify(params)
+      , method: 'GET'
+      , state: state    // this becomes browser_state
+      , params: params  // includes scope, final redirect_uri?
+      });
     });
   };
 
@@ -482,10 +492,7 @@
     //  &scope=`encodeURIComponent('profile.login profile.email')`
     //  &state=`Math.random()`
     //  &client_id=xxxxxxxxxxx
-    //  &redirect_uri=
-    //    `encodeURIComponent('https://other.com/'
-    //       + '?provider_uri=' + ``encodeURIComponent('https://example.com')``
-    //    )`
+    //  &redirect_uri=`encodeURIComponent('https://myapp.com/oauth3.html')`
     //
     // NOTE: `redirect_uri` itself may also contain URI-encoded components
     //
@@ -508,7 +515,7 @@
     //  &scope=`encodeURIComponent('profile.login profile.email')`
     //  &state=`Math.random()`
     //  &client_id=xxxxxxxxxxx
-    //  &redirect_uri=`encodeURIComponent('https://myself.com')`
+    //  &redirect_uri=`encodeURIComponent('https://myapp.com/oauth3.html')`
     //
     // NOTE: `redirect_uri` itself may also contain URI-encoded components
     //
