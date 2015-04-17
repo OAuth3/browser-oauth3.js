@@ -55,6 +55,7 @@
   };
 
   oauth3.providePromise = function (PromiseA) {
+    oauth3.PromiseA = PromiseA;
     return oauth3._testPromise(PromiseA).then(function () {
       oauth3.PromiseA = PromiseA;
     });
@@ -183,10 +184,11 @@
   oauth3.insertIframe = function (url, state, opts) {
     var promise = new oauth3.PromiseA(function (resolve, reject) {
       var tok;
+      var $iframe;
 
       function cleanup() {
         delete window['__oauth3_' + state];
-        promise.$iframe.remove();
+        $iframe.remove();
         clearTimeout(tok);
         tok = null;
       }
@@ -205,22 +207,22 @@
       }, opts.timeout || 15000);
 
       // TODO hidden / non-hidden (via directive even)
-      promise.$iframe = $(
+      $iframe = $(
         '<iframe src="' + url
       + '" width="800px" height="800px" style="opacity: 0.8;" frameborder="1"></iframe>'
       //+ '" width="1px" height="1px" style="opacity: 0.01;" frameborder="0"></iframe>'
       );
 
-      $('body').append(promise.$iframe);
+      $('body').append($iframe);
     });
 
     // TODO periodically garbage collect expired handlers from window object
-    promise.createdAt = Date.now();
     return promise;
   };
 
   oauth3.openWindow = function (url, state, opts) {
     var promise = new oauth3.PromiseA(function (resolve, reject) {
+      var winref;
       var tok;
 
       function cleanup() {
@@ -229,7 +231,7 @@
         tok = null;
         // this is last in case the window self-closes synchronously
         // (should never happen, but that's a negotiable implementation detail)
-        promise._window.close();
+        winref.close();
       }
 
       window['__oauth3_' + state] = function (params) {
@@ -246,11 +248,10 @@
       }, opts.timeout || 3 * 60 * 1000);
 
       // TODO allow size changes (via directive even)
-      promise._window = window.open(url, 'oauth3-login-' + state, 'height=720,width=620');
+      winref = window.open(url, 'oauth3-login-' + state, 'height=720,width=620');
     });
 
     // TODO periodically garbage collect expired handlers from window object
-    promise.createdAt = Date.now();
     return promise;
   };
 
