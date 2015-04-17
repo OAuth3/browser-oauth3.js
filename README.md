@@ -16,9 +16,29 @@ framework agnostic utilities for seemless login, logout, user switching, and sco
 
 ## oauth3.js
 
+**Public API**
+
 * `window.OAUTH3.login(providerUri, options)`
+* `window.OAUTH3.backgroundLogin(providerUri, options)`
+* `window.OAUTH3.logout(providerUri, options)` (todo: spec for oauth3.json)
 * `window.OAUTH3.discover(providerUri)`
 * `window.OAUTH3.providePromise(PromiseA)`
+* `window.OAUTH3.provideRequest(HttpRequest)`
+* `window.OAUTH3.normalizeProviderUri(providerUri)`
+  * (i.e. turns 'example.com/' into 'https://example.com')
+* `window.OAUTH3.querystringify(obj)`
+  * properly encodes and stringifies both keys and values of query parameters
+* `window.OAUTH3.stringifyscope(scope)`
+  * returns space-delimited string from string or array
+
+**Private API**
+
+* `oauth3.createState()` creates a psuedorandom state
+* `oauth3.frameRequest(url, state, opts)` chooses window, popup, visible iframe, or hidden iframe
+* `oauth3.openWindow(url, state, opts)` (todo params for height, width, etc)
+* `oauth3.insertIframe(url, state, opts)` (todo params for visibility, height, width)
+* `oauth3._testPromise(PromiseA)`
+* `oauth3._discoverHelper(providerUri)`
 
 ### `window.OAUTH3.login(providerUri, options)`
 
@@ -107,6 +127,33 @@ so there is no login, but I need to double check.
 In any case, the client would use the client id.
 The server would use both the client id and the secret.
 
+### `window.OAUTH3.backgroundLogin(providerUri, options)`
+
+Same as the above, except that it opens a hidden iframe.
+
+The login will succeed or fail immediately depending on whether or not
+the user has already granted your requested scopes.
+
+### `window.OAUTH3.logout(providerUri, options)`
+
+Currently logs you out of all logins and accounts of the provider
+(i.e. you can't use `backgroundLogin()` to get a token)
+
+It should allow for granular selection, but we're not there yet.
+
+```
+var promise = window.OAUTH3.logout('https://ldsconnect.org');
+
+promise.then(function () {
+  // success
+}, function (err) {
+  // most likely the logout timed out due to an improper implementation
+  // on the provider's end (not your fault)
+}).catch(function (err) {
+  // I don't think this should ever happen
+});
+```
+
 ### `window.OAUTH3.discover(providerUri)`
 
 This fetches https://example-provider.com/oauth3.json through https://example-provider.com/oauth3.html.
@@ -186,5 +233,16 @@ Notes
 
 These are issues that exist in OAuth2 and I need to think about them and consider how OAuth2 addresses them and how OAuth3 can address them.
 
-* iOS: I can steal a client_id from a webapp and then use it in a mobile webview to pose as that app.
-* FxOS: I can hijack a redirect for any arbitrary domain: 
+* iOS: Can I steal a client_id from a webapp and then use it in a mobile webview to pose as that app?
+* FxOS: I can hijack a redirect for any arbitrary domain (see manifest.json docs): 
+  * (mitigated) must pass app review process, so this is not likely
+  * (mitigated) user must have logged in *within* a window in the app, so this is not likely
+
+### password vs passphrase vs key
+
+It is recommended to require 12+ character passphrases.
+
+Theory: It would be recommended to generate and passphrase-encrypt a key in the client,
+however, the mechanisms for backing up and recovering that key across devices is still unclear.
+
+Check back later.
