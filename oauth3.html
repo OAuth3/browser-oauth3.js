@@ -7,31 +7,35 @@
     var browserState;
     var browserCallback;
 
-    anchor = document.createElement('a');
-    anchor.href = window.location.href;
-    anchor.search.substr(1).split('&').forEach(function (pair) {
-      pair = pair.split('=');
-      var key = decodeURIComponent(pair[0]);
-      var val = decodeURIComponent(pair[1]);
+    function parseParams() {
+      anchor = document.createElement('a');
+      anchor.href = window.location.href;
+      anchor.search.substr(1).split('&').forEach(function (pair) {
+        pair = pair.split('=');
+        var key = decodeURIComponent(pair[0]);
+        var val = decodeURIComponent(pair[1]);
 
-      params[key] = val;
-    });
-    anchor.hash.substr(1).split('&').forEach(function (pair) {
-      pair = pair.split('=');
-      var key = decodeURIComponent(pair[0]);
-      var val = decodeURIComponent(pair[1]);
+        params[key] = val;
+      });
+      anchor.hash.substr(1).split('&').forEach(function (pair) {
+        pair = pair.split('=');
+        var key = decodeURIComponent(pair[0]);
+        var val = decodeURIComponent(pair[1]);
 
-      if (params[key]) {
-        console.warn("overwriting key '" + key + "' '" + params[key] + "'");
-      }
-      params[key] = val;
-    });
+        if (params[key]) {
+          console.warn("overwriting key '" + key + "' '" + params[key] + "'");
+        }
+        params[key] = val;
+      });
+
+      return params;
+    }
 
     function querystringify(params) {
       var arr = [];
 
       Object.keys(params).forEach(function (k) {
-        arr.push(encodeURIComponent(k), encodeURIComponent(params[k]));
+        arr.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
       });
 
       return arr.join('&');
@@ -54,25 +58,107 @@
       browserCallback = 'completeLogin';
     }
 
-    if (params.logout) {
+    function lintAndSetRedirectable() {
       if (!params.redirect_uri) {
         window.alert('redirect_uri not defined');
         err = new Error('redirect_uri not defined');
         console.error(err.message);
         console.warn(err.stack);
         params.redirect_uri = document.referer;
-        phoneAway();
-        return;
+        return false;
       }
 
       if (!browserState) {
         params.error = "E_NO_BROWSER_STATE";
         params.error_description = "you must specify a state parameter";
-        phoneAway();
-        return;
+        return false;
       }
 
       localStorage.setItem('oauth3.states.' + browserState, JSON.stringify(params));
+      return true;
+    }
+
+    function redirectCallback() {
+      var redirect_uri = params.redirect_uri;
+      delete params.redirect_uri;
+      console.log('d', redirect_uri);
+      params.close = true;
+      params.callback = browserState;
+
+      var url = redirect_uri + '#' + querystringify(params);
+
+      console.log('[real] ldsconnect.org', params);
+      window.location.href = url;
+    }
+
+    params = parseParams();
+    browserState = params.browser_state || params.state;
+
+    if ('directives' === params.action || params.directives) {
+      console.log('a')
+
+      if (!lintAndSetRedirectable()) {
+        console.log('a bad')
+        phoneAway();
+      }
+
+      var updatedAt = new Date(localStorage.getItem('oauth3.directives.updated_at')).valueOf();
+      var fresh = (Date.now() - updatedAt) < (24 * 60 * 60 * 1000);
+      var directives = localStorage.getItem('oauth3.directives');
+      var redirected = false;
+
+      function redirectIf() {
+        if (redirected) {
+          return;
+        }
+
+        redirected = true;
+        redirectCallback();
+      }
+
+      if (directives) {
+        console.log('b cache')
+        params.directives = directives;
+        redirectIf();
+        if (fresh) {
+          return;
+        }
+      }
+
+      var req = new XMLHttpRequest();
+      req.open('GET', 'oauth3.json', true);
+      req.addEventListener('readystatechange', function () {
+        if (4 !== req.readyState) {
+          return;
+        }
+
+        if (200 !== req.status) {
+          params.error = "E_STATUS_" + req.status;
+          params.error_description = "expected 200 OK json or text response for oauth3.json but got '" + req.status + "'";
+          redirectIf();
+          return;
+        }
+
+        console.log('c')
+        try {
+          directives = btoa(JSON.stringify(JSON.parse(req.responseText)));
+          params.directives = directives;
+          localStorage.setItem('oauth3.directives', directives);
+          localStorage.setItem('oauth3.directives.updated_at', new Date().toISOString());
+        } catch(e) {
+          params.error = "E_PARSE_JSON";
+          params.error_description = e.message;
+          console.error(params.error);
+          console.error(params.error_description);
+          console.error(req.responseText);
+        }
+
+        redirectIf();
+      });
+      req.send();
+    }
+    else if ('logout' === params.action || params.logout) {
+      lintAndSetRedirectable();
 
       // TODO specify specific account or all?
       window.location.href = '/#/logout/' + browserState;
