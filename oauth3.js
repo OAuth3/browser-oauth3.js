@@ -174,6 +174,12 @@
     return promise;
   };
 
+  oauth3.backgroundLogin = function (providerUri, opts) {
+    opts = opts || {};
+    opts.type = 'background';
+    return oauth3.login(providerUri, opts);
+  };
+
   oauth3.insertIframe = function (url, state, opts) {
     var promise = new oauth3.PromiseA(function (resolve, reject) {
       var tok;
