@@ -3,7 +3,6 @@
 
   var oauth3 = {};
   var logins = {};
-  oauth3.states = {};
   oauth3.requests = logins;
 
   if ('undefined' !== typeof Promise) {
@@ -12,7 +11,7 @@
     console.warn("[oauth3.js] Remember to call oauth3.providePromise(Promise) with a proper Promise implementation");
   }
 
-  oauth3.providePromise = function (PromiseA) {
+  oauth3._testPromise = function (PromiseA) {
     var promise;
     var x = 1;
 
@@ -49,53 +48,16 @@
       });
 
       x = 3;
-    }).then(function () {
-      oauth3.PromiseA = PromiseA;
     });
 
     x = 2;
     return promise;
   };
 
-  var loginPromises = {};
-  window.completeLogin = function (_, __, params) {
-    var state = params.browser_state || params.state;
-    var stateParams = oauth3.states[state];
-    // TODO nix other progressPromises?
-    var d = loginPromises[state];
-
-    function closeWindow() {
-      if (d.winref) {
-        d.winref.close();
-      }
-      if (d.$iframe) {
-        d.$iframe.remove();
-      }
-    }
-
-    d.promise.then(closeWindow).catch(closeWindow);
-
-    if (!state) {
-      d.reject(new Error("could not parse state from login"));
-      return;
-    }
-
-    if (stateParams.logout || stateParams.close) {
-      d.resolve();
-      return;
-    }
-
-    if (!params.access_token) {
-      d.reject(new Error("didn't get token")); // destroy();
-      return;
-    }
-
-    if (!stateParams) {
-      d.reject(new Error("didn't get matching state")); // could be an attack?
-      return;
-    }
-
-    d.resolve(params);
+  oauth3.providePromise = function (PromiseA) {
+    return oauth3._testPromise(PromiseA).then(function () {
+      oauth3.PromiseA = PromiseA;
+    });
   };
 
   logins.authorizationRedirect = function (providerUri, opts) {
@@ -109,32 +71,9 @@
         throw new Error("[Devolper Error] [authorization redirect] prequest.state is empty");
       }
 
-      if ('background' === opts.type || opts.background) {
-        return oauth3.insertIframe(prequest.url, prequest.state, opts);
-      } else if ('popup' === opts.type || opts.popup) {
-        return oauth3.openWindow(prequest.url, prequest.state, opts);
-      } else {
-        throw new Error("login framing method not specified or not type yet implemented");
-      }
+      return oauth3.frameRequest(prequest.url, prequest.state, opts);
     });
   };
-
-  /*
-  logins.implicitGrantLogin = function (providerUri, opts) {
-    opts = opts || {};
-
-    // XXX not implemented
-    return oauth3.requests.implicitGrant(providerUri, {
-      background: opts.background // iframe in background
-    , popup: opts.popup           // presented in popup
-    , window: opts.window         // presented in new tab / new window
-    , iframe: opts.iframe         // presented in same window with security code
-                                  // linked to bower_components/oauth3/oauth3.html
-    , redirectUri: opts.redirectUri
-    , scope: opts.scope
-    });
-  };
-  */
 
   logins.implicitGrant = function (providerUri, opts) {
     var clientId = opts.appId;
@@ -151,11 +90,8 @@
       if (!prequest.state) {
         throw new Error("[Devolper Error] [implicit grant] prequest.state is empty");
       }
-      if ('background' === opts.type || opts.background) {
-        return oauth3.insertIframe(prequest.url, prequest.state, opts);
-      } else if ('popup' === opts.type || opts.popup) {
-        return oauth3.openWindow(prequest.url, prequest.state, opts);
-      }
+
+      return oauth3.frameRequest(prequest.url, prequest.state, opts);
     });
   };
 
@@ -177,6 +113,16 @@
     });
   };
 
+  oauth3.frameRequest = function (url, state, opts) {
+    if ('background' === opts.type) {
+      return oauth3.insertIframe(url, state, opts);
+    } else if ('popup' === opts.type) {
+      return oauth3.openWindow(url, state, opts);
+    } else {
+      throw new Error("login framing method not specified or not type yet implemented");
+    }
+  };
+
   oauth3.login = function (providerUri, opts) {
     // Four styles of login:
     //   * background (hidden iframe)
@@ -191,26 +137,37 @@
 
     var promise;
 
+    if (opts.username || opts.password) {
+      /* jshint ignore:start */
+      // ingore "confusing use of !"
+      if (!opts.username !== !opts.password) {
+        throw new Error("you did not specify both username and password");
+      }
+      /* jshint ignore:end */
+
+      var username = opts.username;
+      var password = opts.password;
+      delete opts.username;
+      delete opts.password;
+
+      return logins.resourceOwnerPassword(providerUri, username, password, opts);
+    }
+
     // TODO support dual-strategy login
     // by default, always get implicitGrant (for client)
     // and optionally do authorizationCode (for server session)
+    if ('background' === opts.type || opts.background) {
+      opts.type = 'background';
+      opts.background = true;
+    }
+    else {
+      opts.type = 'popup';
+      opts.popup = true;
+    }
     if (opts.authorizationRedirect) {
-      if ('background' === opts.type || opts.background) {
-        opts.type = 'background';
-        opts.background = true;
-      } else {
-        opts.type = 'popup';
-        opts.popup = true;
-      }
       promise = logins.authorizationRedirect(providerUri, opts);
-    } else {
-      if ('background' === opts.type || opts.background) {
-        opts.type = 'background';
-        opts.background = true;
-      } else {
-        opts.type = 'popup';
-        opts.popup = true;
-      }
+    }
+    else {
       promise = logins.implicitGrant(providerUri, opts);
     }
 
@@ -360,15 +317,13 @@
     return providerUri;
   };
 
-  oauth3.realDiscover = function (providerUri) {
+  oauth3._discoverHelper = function (providerUri) {
     var state = oauth3.createState();
     var params;
     var url;
 
     return new oauth3.PromiseA(function (resolve/*, reject*/) {
       var $iframe;
-
-      oauth3.states[state] = { close: 'true', action: 'directives' };
 
       window['__oauth3_' + state] = function (params) {
         //console.info('directives found', params);
@@ -421,7 +376,7 @@
       return promise;
     }
 
-    promise = promise || oauth3.realDiscover(providerUri).then(function (params) {
+    promise = promise || oauth3._discoverHelper(providerUri).then(function (params) {
       var err;
 
       if (!params.directives) {
@@ -500,11 +455,6 @@
       apiHost = 'https://' + window.location.host;
     }
 
-    oauth3.states[state] = {
-      providerUri: providerUri
-    , createdAt: new Date().toISOString()
-    };
-
     return oauth3.PromiseA.resolve({
       url: apiHost
         + '/api/oauth3/authorization_redirect/'
@@ -564,15 +514,8 @@
       var uri = args.url;
       var state = Math.random().toString().replace(/^0\./, '');
       var params = {};
-      //var rparams = { /*provider_uri: providerUri*/ };
       var loc;
       var result;
-
-      // TODO nix rparams if we can do this with state alone
-      oauth3.states[state] = {
-        providerUri: providerUri
-      , createdAt: new Date().toISOString()
-      };
 
       params.state = state;
       params.response_type = responseType;
@@ -594,7 +537,6 @@
         }
         redirectUri += 'oauth3.html';
       }
-      //redirectUri += '#' + oauth3.querystringify(rparams);
       params.redirect_uri = redirectUri;
 
       uri += '?' + oauth3.querystringify(params);
