@@ -2,10 +2,14 @@
   'use strict';
 
   var oauth3 = {};
+  var logins = {};
   oauth3.states = {};
+  oauth3.requests = logins;
 
   if ('undefined' !== typeof Promise) {
     oauth3.PromiseA = Promise;
+  } else {
+    console.warn("[oauth3.js] Remember to call oauth3.providePromise(Promise) with a proper Promise implementation");
   }
 
   oauth3.providePromise = function (PromiseA) {
@@ -50,6 +54,268 @@
     });
 
     x = 2;
+    return promise;
+  };
+
+  var loginPromises = {};
+  window.completeLogin = function (_, __, params) {
+    var state = params.browser_state || params.state;
+    var stateParams = oauth3.states[state];
+    // TODO nix other progressPromises?
+    var d = loginPromises[state];
+
+    function closeWindow() {
+      if (d.winref) {
+        d.winref.close();
+      }
+      if (d.$iframe) {
+        d.$iframe.remove();
+      }
+    }
+
+    d.promise.then(closeWindow).catch(closeWindow);
+
+    if (!state) {
+      d.reject(new Error("could not parse state from login"));
+      return;
+    }
+
+    if (stateParams.logout || stateParams.close) {
+      d.resolve();
+      return;
+    }
+
+    if (!params.access_token) {
+      d.reject(new Error("didn't get token")); // destroy();
+      return;
+    }
+
+    if (!stateParams) {
+      d.reject(new Error("didn't get matching state")); // could be an attack?
+      return;
+    }
+
+    d.resolve(params);
+  };
+
+  logins.authorizationRedirect = function (providerUri, opts) {
+    return oauth3.authorizationRedirect(
+      providerUri
+    , opts.scope // default to directive from this provider
+    , opts.apiHost
+    , opts.redirectUri
+    ).then(function (prequest) {
+      if (!prequest.state) {
+        throw new Error("[Devolper Error] [authorization redirect] prequest.state is empty");
+      }
+
+      if ('background' === opts.type || opts.background) {
+        return oauth3.insertIframe(prequest.url, prequest.state, opts);
+      } else if ('popup' === opts.type || opts.popup) {
+        return oauth3.openWindow(prequest.url, prequest.state, opts);
+      } else {
+        throw new Error("login framing method not specified or not type yet implemented");
+      }
+    });
+  };
+
+  /*
+  logins.implicitGrantLogin = function (providerUri, opts) {
+    opts = opts || {};
+
+    // XXX not implemented
+    return oauth3.requests.implicitGrant(providerUri, {
+      background: opts.background // iframe in background
+    , popup: opts.popup           // presented in popup
+    , window: opts.window         // presented in new tab / new window
+    , iframe: opts.iframe         // presented in same window with security code
+                                  // linked to bower_components/oauth3/oauth3.html
+    , redirectUri: opts.redirectUri
+    , scope: opts.scope
+    });
+  };
+  */
+
+  logins.implicitGrant = function (providerUri, opts) {
+    var clientId = opts.appId;
+    var scope = opts.scope;
+
+    // TODO OAuth3 provider should use the redirect URI as the appId?
+    return oauth3.implicitGrant(
+      providerUri
+      // TODO OAuth3 provider should referer / origin as the appId?
+    , scope
+    , opts.redirectUri
+    , clientId // (this location)
+    ).then(function (prequest) {
+      if (!prequest.state) {
+        throw new Error("[Devolper Error] [implicit grant] prequest.state is empty");
+      }
+      if ('background' === opts.type || opts.background) {
+        return oauth3.insertIframe(prequest.url, prequest.state, opts);
+      } else if ('popup' === opts.type || opts.popup) {
+        return oauth3.openWindow(prequest.url, prequest.state, opts);
+      }
+    });
+  };
+
+  logins.resourceOwnerPassword = function (providerUri, username, passphrase, opts) {
+    var scope = opts.scope;
+    var appId = opts.appId;
+    return oauth3.resourceOwnerPassword(
+      providerUri
+    , username
+    , passphrase
+    , scope
+    , appId
+    ).then(function (request) {
+      return oauth3.request({
+        url: request.url + '?camel=true'
+      , method: request.method
+      , data: request.data
+      });
+    });
+  };
+
+  oauth3.login = function (providerUri, opts) {
+    // Four styles of login:
+    //   * background (hidden iframe)
+    //   * iframe (visible iframe, needs border color and width x height params)
+    //   * popup (needs width x height and positioning? params)
+    //   * window (params?)
+
+    // Two strategies
+    //  * authorization_redirect (to server authorization code)
+    //  * implicit_grant (default, browser-only)
+    // If both are selected, implicit happens first and then the other happens in background
+
+    var promise;
+
+    // TODO support dual-strategy login
+    // by default, always get implicitGrant (for client)
+    // and optionally do authorizationCode (for server session)
+    if (opts.authorizationRedirect) {
+      if ('background' === opts.type || opts.background) {
+        opts.type = 'background';
+        opts.background = true;
+      } else {
+        opts.type = 'popup';
+        opts.popup = true;
+      }
+      promise = logins.authorizationRedirect(providerUri, opts);
+    } else {
+      if ('background' === opts.type || opts.background) {
+        opts.type = 'background';
+        opts.background = true;
+      } else {
+        opts.type = 'popup';
+        opts.popup = true;
+      }
+      promise = logins.implicitGrant(providerUri, opts);
+    }
+
+    return promise;
+  };
+
+  oauth3.insertIframe = function (url, state, opts) {
+    var promise = new oauth3.PromiseA(function (resolve, reject) {
+      var tok;
+
+      function cleanup() {
+        delete window['__oauth3_' + state];
+        promise.$iframe.remove();
+        clearTimeout(tok);
+        tok = null;
+      }
+
+      window['__oauth3_' + state] = function (params) {
+        //console.info('[iframe] complete', params);
+        resolve(params);
+        cleanup();
+      };
+
+      tok = setTimeout(function () {
+        var err = new Error("the iframe request did not complete within 15 seconds");
+        err.code = "E_TIMEOUT";
+        reject(err);
+        cleanup();
+      }, opts.timeout || 15000);
+
+      // TODO hidden / non-hidden (via directive even)
+      promise.$iframe = $(
+        '<iframe src="' + url
+      + '" width="800px" height="800px" style="opacity: 0.8;" frameborder="1"></iframe>'
+      //+ '" width="1px" height="1px" style="opacity: 0.01;" frameborder="0"></iframe>'
+      );
+
+      $('body').append(promise.$iframe);
+    });
+
+    // TODO periodically garbage collect expired handlers from window object
+    promise.createdAt = Date.now();
+    return promise;
+  };
+
+  oauth3.openWindow = function (url, state, opts) {
+    var promise = new oauth3.PromiseA(function (resolve, reject) {
+      var tok;
+
+      function cleanup() {
+        delete window['__oauth3_' + state];
+        clearTimeout(tok);
+        tok = null;
+        // this is last in case the window self-closes synchronously
+        // (should never happen, but that's a negotiable implementation detail)
+        promise._window.close();
+      }
+
+      window['__oauth3_' + state] = function (params) {
+        //console.info('[popup] (or window) complete', params);
+        resolve(params);
+        cleanup();
+      };
+
+      tok = setTimeout(function () {
+        var err = new Error("the windowed request did not complete within 3 minutes");
+        err.code = "E_TIMEOUT";
+        reject(err);
+        cleanup();
+      }, opts.timeout || 3 * 60 * 1000);
+
+      // TODO allow size changes (via directive even)
+      promise._window = window.open(url, 'oauth3-login-' + state, 'height=720,width=620');
+    });
+
+    // TODO periodically garbage collect expired handlers from window object
+    promise.createdAt = Date.now();
+    return promise;
+  };
+
+  oauth3.logout = function (providerUri, opts) {
+    opts = opts || {};
+
+    // Oauth3.init({ logout: function () {} });
+    //return Oauth3.logout();
+
+    var promise;
+    var state = parseInt(Math.random().toString().replace('0.', ''), 10).toString('36');
+    var url = providerUri + (opts.providerOauth3Html || '/oauth3.html#');
+    var params = {
+      // logout=true for all logins/accounts
+      // logout=app-scoped-login-id for a single login
+      logout: true
+    , action: 'logout'
+      // TODO specify specific accounts / logins to delete from session
+    , accounts: true
+    , logins: true
+    , redirect_uri: opts.redirectUri || (window.location.protocol + '//' + window.location.host
+        + window.location.pathname + 'oauth3.html')
+    , state: state
+    };
+    url += oauth3.querystringify(params);
+
+    promise = oauth3.insertIframe(url, state, opts);
+
     return promise;
   };
 
@@ -105,12 +371,12 @@
       oauth3.states[state] = { close: 'true', action: 'directives' };
 
       window['__oauth3_' + state] = function (params) {
-        console.info('directives found', params);
+        //console.info('directives found', params);
         resolve(params);
       };
 
       // logout=true for all logins/accounts
-      // logout=app-scoped-login-id for a single login 
+      // logout=app-scoped-login-id for a single login
       params = {
         action: 'directives'
       , state: state
@@ -119,7 +385,7 @@
       };
 
       url = providerUri + '/oauth3.html#' + oauth3.querystringify(params);
-      console.log('[local] oauth3 discover', url);
+      //console.log('[local] oauth3 discover', url);
 
       $iframe = $(
         '<iframe src="' + url
@@ -151,7 +417,7 @@
     }
 
     if (fresh) {
-      console.log('[local] [fresh directives]', directives);
+      //console.log('[local] [fresh directives]', directives);
       return promise;
     }
 
@@ -196,6 +462,7 @@
   };
 
   oauth3.authorizationRedirect = function (providerUri, scope, apiHost, redirectUri) {
+    //console.log('[authorizationRedirect]');
     //
     // Example Authorization Redirect - from Browser to Consumer API
     // (for generating a session securely on your own server)
@@ -275,6 +542,7 @@
   };
 
   oauth3.implicitGrant = function (providerUri, scope, redirectUri, clientId) {
+    //console.log('[implicitGrant]');
     //
     // Example Implicit Grant Request
     // (for generating a browser-only session, not a session on your server)
@@ -284,10 +552,7 @@
     //  &scope=`encodeURIComponent('profile.login profile.email')`
     //  &state=`Math.random()`
     //  &client_id=xxxxxxxxxxx
-    //  &redirect_uri=
-    //    `encodeURIComponent('https://other.com/'
-    //       + '?provider_uri=' + ``encodeURIComponent('https://example.com')``
-    //    )`
+    //  &redirect_uri=`encodeURIComponent('https://myself.com')`
     //
     // NOTE: `redirect_uri` itself may also contain URI-encoded components
     //
@@ -299,7 +564,7 @@
       var uri = args.url;
       var state = Math.random().toString().replace(/^0\./, '');
       var params = {};
-      var rparams = { provider_uri: providerUri };
+      //var rparams = { /*provider_uri: providerUri*/ };
       var loc;
       var result;
 
@@ -329,9 +594,9 @@
         }
         redirectUri += 'oauth3.html';
       }
-      redirectUri += '?' + oauth3.querystringify(rparams);
+      //redirectUri += '#' + oauth3.querystringify(rparams);
       params.redirect_uri = redirectUri;
-    
+
       uri += '?' + oauth3.querystringify(params);
 
       result = {

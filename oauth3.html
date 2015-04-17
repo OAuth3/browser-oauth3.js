@@ -5,6 +5,7 @@
     var anchor;
     var err;
     var browserState;
+    var browserCallback;
 
     anchor = document.createElement('a');
     anchor.href = window.location.href;
@@ -46,6 +47,12 @@
     }
 
     browserState = params.browser_state || params.state;
+    if (!params.provider_uri) {
+      browserCallback = params.callback || browserState;
+    } else {
+      // deprecated
+      browserCallback = 'completeLogin';
+    }
 
     if (params.logout) {
       if (!params.redirect_uri) {
@@ -93,10 +100,11 @@
     }
 
     function phoneHome() {
-      if (params.callback && params.callback !== 'completeLogin') {
-        (window.opener||window.parent)['__oauth3_' + params.callback](params);
-      } else {
+      if (browserCallback === 'completeLogin') {
+        // Deprecated
         (window.opener||window.parent).completeLogin(null, params.url, params);
+      } else {
+        (window.opener||window.parent)['__oauth3_' + browserCallback](params);
       }
     }
 
