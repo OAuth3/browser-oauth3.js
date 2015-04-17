@@ -214,20 +214,19 @@ request({
 
 ## oauth3.jquery.js
 
-*TODO*
+*TODO:* (not yet implemented)
+
+No API changes.
+
+This simply wraps 'oauth3.js' as a service using '$.Deferred' and '$.ajax'
+as the PromiseA and HttpRequest implementations.
 
 ## angular-oauth3.js
 
-Utilities which return appropriate urls and request parameters for various login types.
+No API changes.
 
-* `window.ngOauth3`
-* `Oauth3.implicitGrant(provider_uri, scope, redirect_uri, client_id)`
-* `Oauth3.authorizationCode(provider_uri, scope, redirect_uri, client_id)`
-
-Notes
-
-* *client_id* is not required for the implicit grant (browser only) strategy for true oauth3
-* The app id is the last parameter because true lientId
+This simply wraps 'oauth3.js' as a service using '$q' and '$http'
+as the PromiseA and HttpRequest implementations.
 
 ## OAuth2 Security Concerns
 
