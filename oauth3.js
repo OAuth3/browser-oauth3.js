@@ -221,8 +221,8 @@
       // TODO hidden / non-hidden (via directive even)
       $iframe = $(
         '<iframe src="' + url
-      + '" width="800px" height="800px" style="opacity: 0.8;" frameborder="1"></iframe>'
-      //+ '" width="1px" height="1px" style="opacity: 0.01;" frameborder="0"></iframe>'
+      //+ '" width="800px" height="800px" style="opacity: 0.8;" frameborder="1"></iframe>'
+      + '" width="1px" height="1px" style="opacity: 0.01;" frameborder="0"></iframe>'
       );
 
       $('body').append($iframe);
