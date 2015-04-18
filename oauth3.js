@@ -359,7 +359,7 @@
     return oauth3.insertIframe(url, state, opts).then(function (directives) {
       return directives;
     }, function (err) {
-      return oauth3.Promise.reject(err);
+      return oauth3.PromiseA.reject(err);
     });
   };
 
