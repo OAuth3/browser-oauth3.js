@@ -1,32 +1,40 @@
-<script>
-  function main() {
-    var myself = location.protocol + '//' + location.host + location.pathname;
-    var params = {};
+<html>
+<head>
+  <script>
+  (function () {
+    'use strict';
+
+    var rpc = {};
+    //var myself = location.protocol + '//' + location.host + location.pathname;
+    var incoming;
+    var forwarding = {};
     var anchor;
     var err;
     var browserState;
     var browserCallback;
+    var action;
 
     function parseParams() {
+      var params = {};
+
+      function parseParamsString(str) {
+        str.substr(1).split('&').filter(function (el) { return el; }).forEach(function (pair) {
+          pair = pair.split('=');
+          var key = decodeURIComponent(pair[0]);
+          var val = decodeURIComponent(pair[1]);
+
+          if (params[key]) {
+            console.warn("overwriting key '" + key + "' '" + params[key] + "'");
+          }
+          params[key] = val;
+        });
+      }
+
       anchor = document.createElement('a');
       anchor.href = window.location.href;
-      anchor.search.substr(1).split('&').forEach(function (pair) {
-        pair = pair.split('=');
-        var key = decodeURIComponent(pair[0]);
-        var val = decodeURIComponent(pair[1]);
 
-        params[key] = val;
-      });
-      anchor.hash.substr(1).split('&').forEach(function (pair) {
-        pair = pair.split('=');
-        var key = decodeURIComponent(pair[0]);
-        var val = decodeURIComponent(pair[1]);
-
-        if (params[key]) {
-          console.warn("overwriting key '" + key + "' '" + params[key] + "'");
-        }
-        params[key] = val;
-      });
+      parseParamsString(anchor.search);
+      parseParamsString(anchor.hash);
 
       return params;
     }
@@ -41,12 +49,12 @@
       return arr.join('&');
     }
 
-    function phoneAway() {
+    function phoneAway(/*redirectURi, params*/) {
       // TODO test for ? / #
-      window.location.href = params.redirect_uri + '#' + querystringify(params);
+      window.location.href = incoming.redirect_uri + '#' + querystringify(forwarding);
     }
 
-    function lintAndSetRedirectable() {
+    function lintAndSetRedirectable(browserState, params) {
       if (!params.redirect_uri) {
         window.alert('redirect_uri not defined');
         err = new Error('redirect_uri not defined');
@@ -57,8 +65,8 @@
       }
 
       if (!browserState) {
-        params.error = "E_NO_BROWSER_STATE";
-        params.error_description = "you must specify a state parameter";
+        forwarding.error = "E_NO_BROWSER_STATE";
+        forwarding.error_description = "you must specify a state parameter";
         return false;
       }
 
@@ -67,30 +75,58 @@
     }
 
     function redirectCallback() {
-      var redirect_uri = params.redirect_uri;
-      delete params.redirect_uri;
-      params.close = true;
-      params.callback = browserState;
+      var redirect_uri = incoming.redirect_uri;
+      forwarding.callback = browserState;
+      forwarding.action = 'close';
 
-      var url = redirect_uri + '#' + querystringify(params);
+      var url = redirect_uri + '#' + querystringify(forwarding);
 
+      //console.log('[debug] redirect_uri + params:', url);
       window.location.href = url;
     }
 
-    params = parseParams();
-    params.url = window.location.href;
-    browserState = params.browser_state || params.state;
+    rpc = {};
 
-    if (!params.provider_uri) {
-      browserCallback = params.callback || browserState;
-    } else {
-      // deprecated
-      browserCallback = 'completeLogin';
-    }
+    // Act as a provider and log the user out
+    rpc.logout = function (browserState, incoming) {
+      var url;
+      if (!lintAndSetRedirectable(browserState, incoming)) {
+        // TODO fail
+      }
 
-    if ('directives' === params.action || params.directives) {
-      if (!lintAndSetRedirectable()) {
+      localStorage.setItem('oauth3.states.' + browserState, JSON.stringify(incoming));
+      url = '/#/logout/' + browserState;
+
+      // TODO specify specific account or all?
+      window.location.href = url;
+    };
+
+    // Act as a provider and inform the consumer the logout is complete
+    rpc.logout_callback = function (browserState/*, incoming*/) {
+      // TODO pass redirect_uri and state through here so we can avoid localStorage
+      var forwarding = {};
+      var originalRequest;
+
+      if (!browserState) {
+        forwarding.error = "E_NO_BROWSER_STATE";
+        forwarding.error_description = "you must specify a state parameter";
+        if (incoming.redirect_uri) {
+          phoneAway(incoming.redirect_uri, forwarding);
+        }
+        return;
+      }
+
+      originalRequest = JSON.parse(localStorage.getItem('oauth3.states.' + browserState));
+      forwarding.action = 'close';
+      forwarding.state = browserState;
+      //phoneAway(originalRequest.redirect_uri, forwarding);
+      window.location.href = originalRequest.redirect_uri + '#' + querystringify(forwarding);
+    };
+
+    rpc.directives = function (browserState, incoming) {
+      if (!lintAndSetRedirectable(browserState, incoming)) {
         phoneAway();
+        return;
       }
 
       var updatedAt = new Date(localStorage.getItem('oauth3.directives.updated_at')).valueOf();
@@ -108,7 +144,7 @@
       }
 
       if (directives) {
-        params.directives = directives;
+        forwarding.directives = directives;
         redirectIf();
         if (fresh) {
           return;
@@ -123,97 +159,136 @@
         }
 
         if (200 !== req.status) {
-          params.error = "E_STATUS_" + req.status;
-          params.error_description = "expected 200 OK json or text response for oauth3.json but got '" + req.status + "'";
+          forwarding.error = "E_STATUS_" + req.status;
+          forwarding.error_description = "expected 200 OK json or text response for oauth3.json but got '" + req.status + "'";
           redirectIf();
           return;
         }
 
         try {
           directives = btoa(JSON.stringify(JSON.parse(req.responseText)));
-          params.directives = directives;
+          forwarding.directives = directives;
+          forwarding.callback = browserState;
           localStorage.setItem('oauth3.directives', directives);
           localStorage.setItem('oauth3.directives.updated_at', new Date().toISOString());
         } catch(e) {
-          params.error = "E_PARSE_JSON";
-          params.error_description = e.message;
-          console.error(params.error);
-          console.error(params.error_description);
+          forwarding.error = "E_PARSE_JSON";
+          forwarding.error_description = e.message;
+          console.error(forwarding.error);
+          console.error(forwarding.error_description);
           console.error(req.responseText);
         }
 
         redirectIf();
       });
       req.send();
-    }
-    else if ('logout' === params.action || params.logout) {
-      lintAndSetRedirectable();
+    };
 
-      // TODO specify specific account or all?
-      window.location.href = '/#/logout/' + browserState;
-      return;
-    }
-    else if (params.logout_callback) {
-      if (!browserState) {
-        params.error = "E_NO_BROWSER_STATE";
-        params.error_description = "you must specify a state parameter";
-        phoneAway();
-        return;
-      }
+    // the provider is contacting me
+    rpc.close = function (browserState, incoming) {
+      incoming.callback = browserState;
+      catchAll();
+    };
+    // the provider is contacting me
+    rpc.redirect = function (/*browserState, incoming*/) {
+      catchAll();
+    };
 
-      params = JSON.parse(localStorage.getItem('oauth3.states.' + browserState, params));
-      window.location.href = params.redirect_uri + '#close=true&state=' + browserState;
-      return;
-    }
-    else if (params.close) {
-      // don't do anything, phoneHome() will call the final callback
-      params.callback = browserState;
-    }
-    else if (!(params.browser_state || params.state)) {
-      window.alert("callback URLs should include 'browser_state' (authorization code)"
-        + " or 'state' (implicit grant))");
-    }
-
-    function phoneHome() {
-      if (browserCallback === 'completeLogin') {
-        // Deprecated
-        (window.opener||window.parent).completeLogin(null, params.url, params);
-      } else {
-        (window.opener||window.parent)['__oauth3_' + browserCallback](params);
-      }
-    }
-
-    setTimeout(function () {
-      // opener is for popup window, new tab
-      // parent is for iframe
-      phoneHome();
-    }, 10);
-
-    // iOS Webview (namely Chrome) workaround
-    setTimeout(function () {
-      window.open('', '_self', '');
-      window.close();
-    }, 50);
-
-    setTimeout(function () {
-      var i;
-      var len = localStorage.length;
-      var key;
-
-      for (i = 0; i < len; i += 1) {
-        key = localStorage.key(i);
-        // TODO check updatedAt
-        if (/^oauth3\./.test(key)) {
-          localStorage.removeItem(key);
+    function catchAll() {
+      function phoneHome() {
+        if (browserCallback === 'completeLogin') {
+          // Deprecated
+          (window.opener||window.parent).completeLogin(null, null, incoming);
+        } else {
+          (window.opener||window.parent)['__oauth3_' + browserCallback](incoming);
         }
       }
-      params.updatedAt = Date.now();
-      localStorage.setItem('oauth3.' + (params.browser_state || params.state), JSON.stringify(params));
-    }, 0);
-  }
-  main();
-</script>
 
+      if (!(incoming.browser_state || incoming.state)) {
+        window.alert("callback URLs should include 'browser_state' (authorization code)"
+          + " or 'state' (implicit grant))");
+      }
+
+      setTimeout(function () {
+        // opener is for popup window, new tab
+        // parent is for iframe
+        phoneHome();
+      }, 10);
+
+      // iOS Webview (namely Chrome) workaround
+      setTimeout(function () {
+        window.open('', '_self', '');
+        window.close();
+      }, 50);
+
+      setTimeout(function () {
+        var i;
+        var len = localStorage.length;
+        var key;
+
+        for (i = 0; i < len; i += 1) {
+          key = localStorage.key(i);
+          // TODO check updatedAt
+          if (/^oauth3\./.test(key)) {
+            localStorage.removeItem(key);
+          }
+        }
+        forwarding.updatedAt = Date.now();
+        localStorage.setItem('oauth3.' + (forwarding.browser_state || forwarding.state), JSON.stringify(forwarding));
+      }, 0);
+
+    }
+
+    function parseAction(params) {
+      if (params.action) {
+        return params.action;
+      }
+
+      if (params.close) {
+        return 'close';
+      }
+      if (params.logout_callback) {
+        return 'logout_callback';
+      }
+      if (params.logout) {
+        return 'logout';
+      }
+      if (params.callback) {
+        return 'close';
+      }
+      if (params.directives) {
+        return 'directives';
+      }
+
+      return 'redirect';
+    }
+
+    incoming = parseParams();
+    browserState = incoming.browser_state || incoming.state;
+    action = parseAction(incoming);
+    forwarding.url = window.location.href;
+    forwarding.browser_state = browserState;
+    forwarding.state = browserState;
+
+    if (!incoming.provider_uri) {
+      browserCallback = incoming.callback || browserState;
+    } else {
+      // deprecated
+      browserCallback = 'completeLogin';
+    }
+
+    //console.log('[debug]', action, incoming);
+
+    if (rpc[action]) {
+      rpc[action](browserState, incoming);
+    } else {
+      window.alert('unsupported action');
+    }
+  }());
+  </script>
+</head>
+<body>
+<!-- script src="oauth3-internals.js"></script -->
 <p>Redirecting... </p>
-
-<a href="javascript:window.opener.completeLogin(name, window.location.href);">close</a>
+</body>
+</html>

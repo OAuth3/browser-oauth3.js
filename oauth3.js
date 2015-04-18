@@ -62,11 +62,11 @@
   };
 
   logins.authorizationRedirect = function (providerUri, opts) {
+    // TODO get own directives
     return oauth3.authorizationRedirect(
       providerUri
     , opts.authorizationRedirect
-    , opts.redirectUri
-    , opts.scope // default to directive from this provider
+    , opts
     ).then(function (prequest) {
       if (!prequest.state) {
         throw new Error("[Devolper Error] [authorization redirect] prequest.state is empty");
@@ -77,17 +77,13 @@
   };
 
   logins.implicitGrant = function (providerUri, opts) {
-    var clientId = opts.appId;
-    var scope = opts.scope;
-
     // TODO OAuth3 provider should use the redirect URI as the appId?
     return oauth3.implicitGrant(
       providerUri
       // TODO OAuth3 provider should referer / origin as the appId?
-    , scope
-    , opts.redirectUri
-    , clientId // (this location)
+    , opts
     ).then(function (prequest) {
+      // console.log('[debug] prequest', prequest);
       if (!prequest.state) {
         throw new Error("[Devolper Error] [implicit grant] prequest.state is empty");
       }
@@ -115,13 +111,28 @@
   };
 
   oauth3.frameRequest = function (url, state, opts) {
+    var promise;
+
     if ('background' === opts.type) {
-      return oauth3.insertIframe(url, state, opts);
+      promise = oauth3.insertIframe(url, state, opts);
     } else if ('popup' === opts.type) {
-      return oauth3.openWindow(url, state, opts);
+      promise = oauth3.openWindow(url, state, opts);
     } else {
       throw new Error("login framing method not specified or not type yet implemented");
     }
+
+    return promise.then(function (params) {
+      var err;
+
+      if (params.error || params.error_description) {
+        err = new Error(params.error_description || "Unknown response error");
+        err.code = params.error || "E_UKNOWN_ERROR";
+        err.params = params;
+        return oauth3.PromiseA.reject(err); 
+      }
+
+      return params;
+    });
   };
 
   oauth3.login = function (providerUri, opts) {
@@ -182,6 +193,7 @@
   };
 
   oauth3.insertIframe = function (url, state, opts) {
+    opts = opts || {};
     var promise = new oauth3.PromiseA(function (resolve, reject) {
       var tok;
       var $iframe;
@@ -231,7 +243,7 @@
         tok = null;
         // this is last in case the window self-closes synchronously
         // (should never happen, but that's a negotiable implementation detail)
-        winref.close();
+        //winref.close();
       }
 
       window['__oauth3_' + state] = function (params) {
@@ -249,6 +261,10 @@
 
       // TODO allow size changes (via directive even)
       winref = window.open(url, 'oauth3-login-' + state, 'height=720,width=620');
+      if (!winref) {
+        reject("TODO: open the iframe first and discover oauth3 directives before popup");
+        cleanup();
+      }
     });
 
     // TODO periodically garbage collect expired handlers from window object
@@ -267,8 +283,7 @@
     var params = {
       // logout=true for all logins/accounts
       // logout=app-scoped-login-id for a single login
-      logout: true
-    , action: 'logout'
+      action: 'logout'
       // TODO specify specific accounts / logins to delete from session
     , accounts: true
     , logins: true
@@ -296,9 +311,9 @@
 
     Object.keys(params).forEach(function (key) {
       if ('scope' === key) {
-        oauth3.stringifyscope(params[key]);
+        params[key] = oauth3.stringifyscope(params[key]);
       }
-      qs.push(key + '=' + encodeURIComponent(params[key]));
+      qs.push(encodeURIComponent(key) + '=' + encodeURIComponent(params[key]));
     });
 
     return qs.join('&');
@@ -325,41 +340,36 @@
     return providerUri;
   };
 
-  oauth3._discoverHelper = function (providerUri) {
+  oauth3._discoverHelper = function (providerUri, opts) {
+    opts = opts || {};
     var state = oauth3.createState();
     var params;
     var url;
 
-    return new oauth3.PromiseA(function (resolve/*, reject*/) {
-      var $iframe;
+    params = {
+      action: 'directives'
+    , state: state
+      // TODO this should be configurable (i.e. I want a dev vs production oauth3.html)
+    , redirect_uri: window.location.protocol + '//' + window.location.host
+        + window.location.pathname + 'oauth3.html'
+    };
 
-      window['__oauth3_' + state] = function (params) {
-        //console.info('directives found', params);
-        resolve(params);
-      };
+    url = providerUri + '/oauth3.html#' + oauth3.querystringify(params);
 
-      // logout=true for all logins/accounts
-      // logout=app-scoped-login-id for a single login
-      params = {
-        action: 'directives'
-      , state: state
-      , redirect_uri: window.location.protocol + '//' + window.location.host
-          + window.location.pathname + 'oauth3.html'
-      };
-
-      url = providerUri + '/oauth3.html#' + oauth3.querystringify(params);
-      //console.log('[local] oauth3 discover', url);
-
-      $iframe = $(
-        '<iframe src="' + url
-      + '" width="800px" height="800px" style="opacity: 0.8;" frameborder="1"></iframe>'
-      //+ '" width="1px" height="1px" style="opacity: 0.01;" frameborder="0"></iframe>'
-      );
-      $('body').append($iframe);
+    return oauth3.insertIframe(url, state, opts).then(function (directives) {
+      return directives;
+    }, function (err) {
+      return oauth3.Promise.reject(err);
     });
   };
 
-  oauth3.discover = function (providerUri) {
+  oauth3.discover = function (providerUri, opts) {
+    opts = opts || {};
+
+    if (opts.directives) {
+      return oauth3.PromiseA.resolve(opts.directives);
+    }
+
     var promise;
     var directives;
     var updatedAt;
@@ -384,7 +394,7 @@
       return promise;
     }
 
-    promise = promise || oauth3._discoverHelper(providerUri).then(function (params) {
+    promise = promise || oauth3._discoverHelper(providerUri, opts).then(function (params) {
       var err;
 
       if (!params.directives) {
@@ -401,30 +411,28 @@
         return oauth3.PromiseA.reject(err);
       }
 
-      try {
-        if (directives.authorization_dialog.url) {
-          // TODO lint directives
-          localStorage.setItem('oauth3.' + providerUri + '.directives', JSON.stringify(directives));
-          localStorage.setItem('oauth3.' + providerUri + '.directives.updated_at', new Date().toISOString());
-          return oauth3.PromiseA.resolve(directives);
-        }
-      } catch(e) {
+      if (directives.authorization_dialog && directives.authorization_dialog.url) {
+        // TODO lint directives
+        localStorage.setItem('oauth3.' + providerUri + '.directives', JSON.stringify(directives));
+        localStorage.setItem('oauth3.' + providerUri + '.directives.updated_at', new Date().toISOString());
+
+        return oauth3.PromiseA.resolve(directives);
+      } else {
         // ignore
         console.error("the directives provided by '" + providerUri + "' were invalid.");
         params.error = params.error || "E_INVALID_DIRECTIVE";
         params.error_description = params.error_description
           || "directives did not include authorization_dialog.url";
+        err = new Error(params.error_description || "Unknown error when discoving provider '" + providerUri + "'");
+        err.code = params.error;
+        return oauth3.PromiseA.reject(err);
       }
-
-      err = new Error(params.error_description || "Unknown error when discoving provider '" + providerUri + "'");
-      err.code = params.error;
-      return oauth3.PromiseA.reject(err);
     });
 
     return promise;
   };
 
-  oauth3.authorizationRedirect = function (providerUri, authorizationRedirect, redirectUri, scope) {
+  oauth3.authorizationRedirect = function (providerUri, authorizationRedirect, opts) {
     //console.log('[authorizationRedirect]');
     //
     // Example Authorization Redirect - from Browser to Consumer API
@@ -443,11 +451,14 @@
     // consumer (your own API) which then sets some state and redirects.
     // This will initiate the `authorization_code` request on your server
     //
+    opts = opts || {};
 
-    return oauth3.discover(providerUri).then(function (directive) {
+    return oauth3.discover(providerUri, opts).then(function (directive) {
       if (!directive) {
         throw new Error("Developer Error: directive should exist when discovery is successful");
       }
+
+      var scope = opts.scope || directive.authn_scope;
 
       var state = Math.random().toString().replace(/^0\./, '');
       var params = {};
@@ -457,8 +468,9 @@
       if (scope) {
         params.scope = scope;
       }
-      if (redirectUri) {
-        params.redirect_uri = redirectUri;
+      if (opts.redirectUri) {
+        // this is really only for debugging
+        params.redirect_uri = opts.redirectUri;
       }
       // Note: the type check is necessary because we allow 'true'
       // as an automatic mechanism when it isn't necessary to specify
@@ -505,7 +517,7 @@
     throw new Error("not implemented");
   };
 
-  oauth3.implicitGrant = function (providerUri, scope, redirectUri, clientId) {
+  oauth3.implicitGrant = function (providerUri, opts) {
     //console.log('[implicitGrant]');
     //
     // Example Implicit Grant Request
@@ -520,10 +532,15 @@
     //
     // NOTE: `redirect_uri` itself may also contain URI-encoded components
     //
+
+    opts = opts || {};
     var type = 'authorization_dialog';
     var responseType = 'token';
 
-    return oauth3.discover(providerUri).then(function (directive) {
+    return oauth3.discover(providerUri, opts).then(function (directive) {
+      var redirectUri = opts.redirectUri;
+      var scope = opts.scope || directive.authn_scope;
+      var clientId = opts.appId;
       var args = directive[type];
       var uri = args.url;
       var state = Math.random().toString().replace(/^0\./, '');
@@ -565,7 +582,7 @@
     });
   };
 
-  oauth3.resourceOwnerPassword = function (providerUri, username, passphrase, scope, clientId) {
+  oauth3.resourceOwnerPassword = function (providerUri, username, passphrase, opts) {
     //
     // Example Resource Owner Password Request
     // (generally for 1st party and direct-partner mobile apps, and webapps)
@@ -574,10 +591,13 @@
     //    { "grant_type": "password", "client_id": "<<id>>", "scope": "<<scope>>"
     //    , "username": "<<username>>", "password": "password" }
     //
+    opts = opts || {};
     var type = 'access_token';
     var grantType = 'password';
 
-    return oauth3.discover(providerUri).then(function (directive) {
+    return oauth3.discover(providerUri, opts).then(function (directive) {
+      var scope = opts.scope || directive.authn_scope;
+      var clientId = opts.appId;
       var args = directive[type];
       var params = {
         "grant_type": grantType
