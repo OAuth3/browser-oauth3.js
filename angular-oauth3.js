@@ -27,6 +27,7 @@ angular
     //PromiseAngularQ.create = PromiseAngularQ;
     PromiseAngularQ.resolve = $q.when;
     PromiseAngularQ.reject = $q.reject;
+    PromiseAngularQ.all = $q.all;
 
     oauth3.providePromise(PromiseAngularQ).then(function () {
       // ignore
