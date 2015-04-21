@@ -47,5 +47,37 @@
     */
   }
 
-  inject();  
+  inject();
+
+  function Request(opts) {
+    if (!opts.method) {
+      throw new Error("Developer Error: you must set method as one of 'GET', 'POST', 'DELETE', etc");
+    }
+
+    var req = {
+      url: opts.url
+      // Noted: jQuery 1.9 finally added 'method' as an alias of 'type'
+    , method: opts.method
+      // leaving type for backwards compat
+    , type: opts.method
+    , headers: opts.headers
+    };
+
+    // don't allow accidetal querystring via 'data'
+    if (opts.data && !/get|delete/i.test(opts.method)) {
+      req.data = opts.data;
+    }
+
+    return $.ajax(req).then(function (data, textStatus, jqXhr) {
+      jqXhr.data = data;
+      jqXhr.status = textStatus;
+      return oauth3.PromiseA.resolve(jqXhr);
+    }, function (jqXhr, textStatus, errorThrown) {
+      errorThrown.response = jqXhr;
+      errorThrown.status = textStatus;
+      return oauth3.PromiseA.reject(errorThrown);
+    });
+  }
+
+  oauth3.provideRequest(Request);
 }());
