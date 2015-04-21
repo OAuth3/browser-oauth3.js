@@ -1,4 +1,4 @@
-(function () {
+(function (exports) {
   'use strict';
 
   var oauth3 = {};
@@ -37,7 +37,7 @@
           if ('undefined' === typeof angular) {
             throw new Error("[NOT AN ERROR] Dear angular users: ignore this error-handling test");
           } else {
-            return PromiseA.reject("[NOT AN ERROR] ignore this error-handling test");
+            return PromiseA.reject(new Error("[NOT AN ERROR] ignore this error-handling test"));
           }
         });
 
@@ -69,7 +69,8 @@
   oauth3.provideRequest = function (request, opts) {
     opts = opts || {};
     var Recase = exports.Recase || require('recase');
-    var recase = Recase.create();
+    // TODO make insensitive to providing exceptions
+    var recase = Recase.create({ exceptions: {} });
 
     if (opts.rawCase) {
       oauth3.request = request;
@@ -677,6 +678,10 @@
     });
   };
 
-  window.OAUTH3 = oauth3;
-  window.oauth3 = oauth3;
-}());
+  exports.OAUTH3 = oauth3.oauth3 = oauth3.OAUTH3 = oauth3;
+  exports.oauth3 = exports.OAUTH3;
+
+  if ('undefined' !== typeof module) {
+    module.exports = oauth3;
+  }
+}('undefined' !== typeof exports ? exports : window));
