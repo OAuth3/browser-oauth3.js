@@ -61,6 +61,15 @@
     });
   };
 
+  oauth3.provideRequest = function (request) {
+    oauth3.request = request;
+    /*
+    return oauth3._testRequest(request).then(function () {
+      oauth3.request = request;
+    });
+    */
+  };
+
   logins.authorizationRedirect = function (providerUri, opts) {
     // TODO get own directives
     return oauth3.authorizationRedirect(

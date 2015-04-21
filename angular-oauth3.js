@@ -5,7 +5,8 @@ angular
   .service('Oauth3', [
     '$timeout'
   , '$q'
-  , function Oauth3($timeout, $q) {
+  , '$http'
+  , function Oauth3($timeout, $q, $http) {
 
     var oauth3 = window.OAUTH3;
 
@@ -29,9 +30,11 @@ angular
 
     oauth3.providePromise(PromiseAngularQ).then(function () {
       // ignore
-    }, function (err) {
+    }, function (/*err*/) {
       console.error("Bad Promise Implementation!");
     });
+
+    oauth3.provideRequest($http);
 
     window.ngOauth3 = oauth3;
 
