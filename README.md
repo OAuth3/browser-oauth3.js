@@ -33,7 +33,7 @@ framework agnostic utilities for seemless login, logout, user switching, and sco
 
 **Private API**
 
-* `oauth3.createState()` creates a psuedorandom state
+* `oauth3.createState()` creates a psuedorandom string for use as state
 * `oauth3.frameRequest(url, state, opts)` chooses window, popup, visible iframe, or hidden iframe
 * `oauth3.openWindow(url, state, opts)` (todo params for height, width, etc)
 * `oauth3.insertIframe(url, state, opts)` (todo params for visibility, height, width)
@@ -59,7 +59,7 @@ framework agnostic utilities for seemless login, logout, user switching, and sco
 
 ```
 var promise = window.OAUTH3.login(
-  "https://ldsconnect.org"
+  "https://myawesomeapp.com"
 , { type: 'popup', appId: 'TEST_ID_9e78b54c44a8746a5727c972' }
 );
 
@@ -76,7 +76,7 @@ promise.then(function (params) {
 
 ```
 var promise = window.OAUTH3.login(
-  "https://ldsconnect.org"
+  "https://myawesomeapp.com"
 , { type: 'popup'
   , authorizationCode: true
   , appId: 'TEST_ID_9e78b54c44a8746a5727c972'
@@ -98,7 +98,7 @@ Note: This is for 1st party apps. As a consumer you will probably not use these.
 
 ```
 var promise = window.OAUTH3.login(
-  "https://ldsconnect.org"
+  "https://myawesomeapp.com"
 , { type: 'popup'
   , username: 'john.doe'
   , password: 'super secret'
@@ -142,7 +142,7 @@ Currently logs you out of all logins and accounts of the provider
 It should allow for granular selection, but we're not there yet.
 
 ```
-var promise = window.OAUTH3.logout('https://ldsconnect.org');
+var promise = window.OAUTH3.logout('https://myawesomeapp.com');
 
 promise.then(function () {
   // success
@@ -162,7 +162,7 @@ OAuth3 implementors SHOULD provide CORS access, however, since it's easier to gi
 to stick in their root than to educate or provide a library for CORS access, oauth3.html is used as a fallback.
 
 ```
-var promise = window.OAUTH3.discover("https://ldsconnect.org");
+var promise = window.OAUTH3.discover("https://myawesomeapp.com");
 
 promise.then(function (directives) {
   console.log('oauth2 / oauth3 directives', directives);
@@ -206,9 +206,29 @@ Example:
 
 ```
 request({
-  url: 'https://ldsconnect.org/api/oauth3/resource_owner_password'
+  url: 'https://myawesomeapp.com/api/oauth3/resource_owner_password'
+, method: 'POST'
+, data: { username: 'john.doe', password: 'super secret', client_id: 'TEST_ID_<<id>>' }
+}).then(function () {
+  console.log('got token', resp.data.access_token);
+}, function () {
+  console.warn('login failed');
+});
+```
+
+Example:
+
+```
+request({
+  url: 'https://myawesomeapp.com/api/oauth3/resource_owner_password'
 , method: 'GET'
-, body: { username: 'john.doe', password: 'super secret', client_id: 'TEST_ID_<<id>>' }
+, headers: { 'Authorization': 'Basic ' + myToken }
+}).then(function (resp) {
+  console.log(resp.data);
+}, function (err) {
+  console.warn("Request Failed");
+  console.warn(err.status);
+  console.error(err);
 });
 ```
 

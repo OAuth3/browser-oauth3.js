@@ -1,6 +1,6 @@
 {
   "name": "OAuth3",
-  "version": "1.0.0-rc5.1",
+  "version": "1.0.0",
   "authors": [
     "AJ ONeal <awesome@coolaj86.com>"
   ],
@@ -22,5 +22,8 @@
     "bower_components",
     "test",
     "tests"
-  ]
+  ],
+  "dependencies": {
+    "recase": "~1.0.4"
+  }
 }

@@ -11,6 +11,7 @@
     console.warn("[oauth3.js] Remember to call oauth3.providePromise(Promise) with a proper Promise implementation");
   }
 
+  // TODO move to a test / lint suite?
   oauth3._testPromise = function (PromiseA) {
     var promise;
     var x = 1;
@@ -33,7 +34,11 @@
             throw new Error("bad promise, reject not asynchronous");
           }
 
-          throw new Error("[NOT AN ERROR] Dear angular users: ignore this error-handling test");
+          if ('undefined' === typeof angular) {
+            throw new Error("[NOT AN ERROR] Dear angular users: ignore this error-handling test");
+          } else {
+            return PromiseA.reject("[NOT AN ERROR] ignore this error-handling test");
+          }
         });
 
         x = 4;
@@ -61,8 +66,40 @@
     });
   };
 
-  oauth3.provideRequest = function (request) {
-    oauth3.request = request;
+  oauth3.provideRequest = function (request, opts) {
+    opts = opts || {};
+    var Recase = exports.Recase || require('recase');
+    var recase = Recase.create();
+
+    if (opts.rawCase) {
+      oauth3.request = request;
+      return;
+    }
+
+    // Wrap oauth3 api calls in snake_case / camelCase conversion
+    oauth3.request = function (req, opts) {
+      opts = opts || {};
+
+      if (opts.rawCase) {
+        return request(req);
+      }
+
+      // convert JavaScript camelCase to oauth3 snake_case
+      if (req.data && 'object' === typeof req.data) {
+        req.originalData = req.data;
+        req.data = recase.snakeCopy(req.data);
+      }
+
+      return request(req).then(function (resp) {
+        // convert oauth3 snake_case to JavaScript camelCase
+        if (resp.data && 'object' === typeof resp.data) {
+          resp.originalData = resp.data;
+          resp.data = recase.camelCopy(resp.data);
+        }
+        return resp;
+      });
+    };
+
     /*
     return oauth3._testRequest(request).then(function () {
       oauth3.request = request;
