@@ -68,14 +68,28 @@
       req.data = opts.data;
     }
 
-    return $.ajax(req).then(function (data, textStatus, jqXhr) {
-      jqXhr.data = data;
-      jqXhr.status = textStatus;
-      return oauth3.PromiseA.resolve(jqXhr);
-    }, function (jqXhr, textStatus, errorThrown) {
-      errorThrown.response = jqXhr;
-      errorThrown.status = textStatus;
-      return oauth3.PromiseA.reject(errorThrown);
+    // I don't trust jQuery promises...
+    return new oauth3.PromiseA(function (resolve, reject) {
+      $.ajax(req).then(function (data, textStatus, jqXhr) {
+        var resp = {};
+
+        Object.keys(jqXhr).forEach(function (key) {
+          // particularly we have to get rid of .then
+          if ('function' !== typeof jqXhr[key]) {
+            resp[key] = jqXhr[key];
+          }
+        });
+
+        resp.data = data;
+        resp.status = textStatus;
+        resp.request = jqXhr;
+        resolve(resp);
+      }, function (jqXhr, textStatus, errorThrown) {
+        errorThrown.request = jqXhr;
+        errorThrown.response = jqXhr;
+        errorThrown.status = textStatus;
+        reject(errorThrown);
+      });
     });
   }
 

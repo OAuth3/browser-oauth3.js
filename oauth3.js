@@ -150,7 +150,7 @@
     , appId
     ).then(function (request) {
       return oauth3.request({
-        url: request.url + '?camel=true'
+        url: request.url
       , method: request.method
       , data: request.data
       });
