@@ -55,7 +55,7 @@ For any provider you can find (or create) the appropriate configuration at https
 
 For example, here's the Facebook configuration:
 
-```
+```javascript
 var fbDirectives = {
   "authorization_dialog": {
     "method": "GET"
