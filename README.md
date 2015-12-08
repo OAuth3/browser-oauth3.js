@@ -21,9 +21,15 @@ bower install --save
 **jQuery**:
 
 ```html
+<!--[if lt IE 12]>
+<script src="/bower_components/es6-promise/promise.js"></script>
+<![endif]-->
 <script src="/bower_components/oauth3/oauth3.js"></script>
 <script src="/bower_components/oauth3/oauth3.jquery.js"></script>
 ```
+
+Note: since jQuery doesn't have a compatible Promise/A implementation,
+es6-promise should be included for MSIE. You can get it via `bower install --save es6-promise`.
 
 **Angular**:
 
@@ -31,6 +37,8 @@ bower install --save
 <script src="/bower_components/oauth3/oauth3.js"></script>
 <script src="/bower_components/oauth3/angular-oauth3.js"></script>
 ```
+
+Note: Angular has a compatible Promise/A implementation built in, so no extra code is needed.
 
 **React**:
 
