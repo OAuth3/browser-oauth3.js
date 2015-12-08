@@ -21,15 +21,23 @@ bower install --save
 **jQuery**:
 
 ```html
-<script src="/bower_components/oauth3/oauth3.js">
-<script src="/bower_components/oauth3/oauth3.jquery.js">
+<script src="/bower_components/oauth3/oauth3.js"></script>
+<script src="/bower_components/oauth3/oauth3.jquery.js"></script>
 ```
 
 **Angular**:
 
 ```html
-<script src="/bower_components/oauth3/oauth3.js">
-<script src="/bower_components/oauth3/angular-oauth3.js">
+<script src="/bower_components/oauth3/oauth3.js"></script>
+<script src="/bower_components/oauth3/angular-oauth3.js"></script>
+```
+
+**React**:
+
+```html
+<script src="/bower_components/oauth3/oauth3.js"></script>
+<!-- contact me if you're using react and I'll help you with a wrapper,
+it's just 20 - 50 lines of code I haven't written yet -->
 ```
 
 ### Directive for Facebook (and others)
