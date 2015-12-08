@@ -1,4 +1,4 @@
-# bower-oauth3
+# oauth3.js
 
 OAuth2 / OAuth3 Components for Bower
 
