@@ -29,7 +29,8 @@ bower install --save
 ```
 
 Note: since jQuery doesn't have a compatible Promise/A implementation,
-es6-promise should be included for MSIE. You can get it via `bower install --save es6-promise`.
+es6-promise (or any Promise/A implementation of your choice) should be included for MSIE.
+You can get it via `bower install --save es6-promise`.
 
 **Angular**:
 
