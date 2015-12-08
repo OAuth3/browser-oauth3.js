@@ -10,6 +10,73 @@ This provides the html and JavaScript necessary to perform **seemless cross-doma
 
 Note: The wrappers are *very* thin.
 
+# QuickStart with Facebook (and others)
+
+### Script Tags
+
+```bash
+bower install --save
+```
+
+**jQuery**:
+
+```html
+<script src="/bower_components/oauth3/oauth3.js">
+<script src="/bower_components/oauth3/oauth3.jquery.js">
+```
+
+**Angular**:
+
+```html
+<script src="/bower_components/oauth3/oauth3.js">
+<script src="/bower_components/oauth3/angular-oauth3.js">
+```
+
+### Directive for Facebook (and others)
+
+For any provider you can find (or create) the appropriate configuration at https://github.com/OAuth3/providers.
+
+For example, here's the Facebook configuration:
+
+```
+var fbDirectives = {
+  "authorization_dialog": {
+    "method": "GET"
+  , "url": "https://www.facebook.com/dialog/oauth"
+  }
+, "access_token": {
+    "method": "POST"
+  , "url": "https://graph.facebook.com/oauth/access_token"
+  }
+, "profile": {
+    "method": "GET"
+  , "url": "https://graph.facebook.com/me"
+  }
+, "authn_scope": ""
+};
+```
+
+### Login
+
+Once you have the directive, you can login very simply
+
+```javascript
+var promise = window.OAUTH3.login(
+  "https://facebook.com"
+, { type: 'popup', appId: 'TEST_ID_9e78b54c44a8746a5727c972', directives: fbDirectives }
+);
+
+promise.then(function (params) {
+  console.log('my login complete params', params);
+}, function (err) {
+  console.log('a handle-able error', err);
+}).catch(function (err) {
+  console.log('an exceptional error', err);
+});
+```
+
+# Documentation
+
 ## oauth3.html
 
 framework agnostic utilities for seemless login, logout, user switching, and scope elevation via iframe and popup.
